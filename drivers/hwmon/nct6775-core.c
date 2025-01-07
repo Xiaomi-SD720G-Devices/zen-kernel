@@ -2262,7 +2262,7 @@ store_temp_offset(struct device *dev, struct device_attribute *attr,
 	if (err < 0)
 		return err;
 
-	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), -128, 127);
+	val = DIV_ROUND_CLOSEST(clamp_val(val, -128000, 127000), 1000);
 
 	mutex_lock(&data->update_lock);
 	data->temp_offset[nr] = val;
@@ -2552,6 +2552,13 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	  = { 255, 255, data->pwm[3][nr] ? : 255, 255, 255, 255, 255 };
 	int err;
 	u16 reg;
+
+	/*
+	 * The fan control mode should be set to manual if the user wants to adjust
+	 * the fan speed. Otherwise, it will fail to set.
+	 */
+	if (index == 0 && data->pwm_enable[nr] > manual)
+		return -EBUSY;
 
 	err = kstrtoul(buf, 10, &val);
 	if (err < 0)
@@ -2871,8 +2878,7 @@ store_target_temp(struct device *dev, struct device_attribute *attr,
 	if (err < 0)
 		return err;
 
-	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 0,
-			data->target_temp_mask);
+	val = DIV_ROUND_CLOSEST(clamp_val(val, 0, data->target_temp_mask * 1000), 1000);
 
 	mutex_lock(&data->update_lock);
 	data->target_temp[nr] = val;
@@ -2952,7 +2958,7 @@ store_temp_tolerance(struct device *dev, struct device_attribute *attr,
 		return err;
 
 	/* Limit tolerance as needed */
-	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 0, data->tolerance_mask);
+	val = DIV_ROUND_CLOSEST(clamp_val(val, 0, data->tolerance_mask * 1000), 1000);
 
 	mutex_lock(&data->update_lock);
 	data->temp_tolerance[index][nr] = val;
@@ -3078,7 +3084,7 @@ store_weight_temp(struct device *dev, struct device_attribute *attr,
 	if (err < 0)
 		return err;
 
-	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 0, 255);
+	val = DIV_ROUND_CLOSEST(clamp_val(val, 0, 255000), 1000);
 
 	mutex_lock(&data->update_lock);
 	data->weight_temp[index][nr] = val;
@@ -3505,6 +3511,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 	const u16 *reg_temp_mon, *reg_temp_alternate, *reg_temp_crit;
 	const u16 *reg_temp_crit_l = NULL, *reg_temp_crit_h = NULL;
 	int num_reg_temp, num_reg_temp_mon, num_reg_tsi_temp;
+	int num_reg_temp_config;
 	struct device *hwmon_dev;
 	struct sensor_template_group tsi_temp_tg;
 
@@ -3587,6 +3594,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6106_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6106_REG_TEMP_HYST;
 		reg_temp_config = NCT6106_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6106_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6106_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6106_REG_TEMP_CRIT;
 		reg_temp_crit_l = NCT6106_REG_TEMP_CRIT_L;
@@ -3662,6 +3670,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6106_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6106_REG_TEMP_HYST;
 		reg_temp_config = NCT6106_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6106_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6106_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6106_REG_TEMP_CRIT;
 		reg_temp_crit_l = NCT6106_REG_TEMP_CRIT_L;
@@ -3739,6 +3748,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6775_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6775_REG_TEMP_HYST;
 		reg_temp_config = NCT6775_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6775_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6775_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6775_REG_TEMP_CRIT;
 
@@ -3814,6 +3824,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6775_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6775_REG_TEMP_HYST;
 		reg_temp_config = NCT6776_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6776_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6776_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6776_REG_TEMP_CRIT;
 
@@ -3893,6 +3904,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6779_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6779_REG_TEMP_HYST;
 		reg_temp_config = NCT6779_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6779_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6779_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6779_REG_TEMP_CRIT;
 
@@ -4027,6 +4039,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6779_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6779_REG_TEMP_HYST;
 		reg_temp_config = NCT6779_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6779_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6779_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6779_REG_TEMP_CRIT;
 
@@ -4116,6 +4129,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		reg_temp_over = NCT6798_REG_TEMP_OVER;
 		reg_temp_hyst = NCT6798_REG_TEMP_HYST;
 		reg_temp_config = NCT6779_REG_TEMP_CONFIG;
+		num_reg_temp_config = ARRAY_SIZE(NCT6779_REG_TEMP_CONFIG);
 		reg_temp_alternate = NCT6798_REG_TEMP_ALTERNATE;
 		reg_temp_crit = NCT6798_REG_TEMP_CRIT;
 
@@ -4197,7 +4211,8 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 				  = reg_temp_crit[src - 1];
 			if (reg_temp_crit_l && reg_temp_crit_l[i])
 				data->reg_temp[4][src - 1] = reg_temp_crit_l[i];
-			data->reg_temp_config[src - 1] = reg_temp_config[i];
+			if (i < num_reg_temp_config)
+				data->reg_temp_config[src - 1] = reg_temp_config[i];
 			data->temp_src[src - 1] = src;
 			continue;
 		}
@@ -4210,7 +4225,8 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		data->reg_temp[0][s] = reg_temp[i];
 		data->reg_temp[1][s] = reg_temp_over[i];
 		data->reg_temp[2][s] = reg_temp_hyst[i];
-		data->reg_temp_config[s] = reg_temp_config[i];
+		if (i < num_reg_temp_config)
+			data->reg_temp_config[s] = reg_temp_config[i];
 		if (reg_temp_crit_h && reg_temp_crit_h[i])
 			data->reg_temp[3][s] = reg_temp_crit_h[i];
 		else if (reg_temp_crit[src - 1])
