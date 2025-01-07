@@ -172,4 +172,5 @@ sphinx_*/
 
 # Ignore build stuff
 clang/
+build.sh
 regen.sh
